@@ -349,6 +349,44 @@ async function saveConfigToStorage(config) {
   await chrome.storage.sync.set({ [STORAGE_KEY]: config });
 }
 
+async function notifyActiveTabConfigSaved(config) {
+  if (!chrome?.tabs?.query || !chrome?.tabs?.sendMessage) return;
+
+  await new Promise((resolve) => {
+    const finish = () => resolve();
+
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime?.lastError) {
+          finish();
+          return;
+        }
+
+        const activeTabId = tabs?.[0]?.id;
+        if (!Number.isInteger(activeTabId)) {
+          finish();
+          return;
+        }
+
+        chrome.tabs.sendMessage(activeTabId, {
+          type: "lav-style-config-updated",
+          config,
+        }, () => {
+          // Ignore when messaging fails or the active tab has no content script.
+          if (chrome.runtime?.lastError) {
+            finish();
+            return;
+          }
+
+          finish();
+        });
+      });
+    } catch {
+      finish();
+    }
+  });
+}
+
 function addThreshold(container, mode) {
   const defaults = mode === "point" ? DEFAULT_CONFIG.pointThresholds : DEFAULT_CONFIG.gradeThresholds;
   const fallback = defaults[defaults.length - 1];
@@ -453,6 +491,7 @@ function attachEvents() {
     try {
       const config = collectAndValidateConfig();
       await saveConfigToStorage(config);
+      await notifyActiveTabConfigSaved(config);
       setStatus("Ustawienia zapisane.");
     } catch (error) {
       setStatus(error.message || "Nie udało się zapisać ustawień.", "error");

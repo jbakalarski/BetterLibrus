@@ -64,6 +64,7 @@
   });
 
   let styleConfig = cloneStyleConfig(DEFAULT_STYLE_CONFIG);
+  let styleConfigSignature = JSON.stringify(styleConfig);
 
   function cloneStyleConfig(config) {
     return JSON.parse(JSON.stringify(config));
@@ -164,6 +165,20 @@
     return normalized;
   }
 
+  function applyStyleConfig(nextConfig) {
+    const normalized = normalizeStyleConfig(nextConfig);
+    const nextSignature = JSON.stringify(normalized);
+    const hasChanged = nextSignature !== styleConfigSignature;
+
+    styleConfig = normalized;
+    styleConfigSignature = nextSignature;
+    return hasChanged;
+  }
+
+  function isExtensionContextInvalidatedError(error) {
+    return String(error?.message || error || "").includes("Extension context invalidated");
+  }
+
   function loadStyleConfig() {
     return new Promise((resolve) => {
       if (!chrome?.storage?.sync) {
@@ -171,13 +186,32 @@
         return;
       }
 
-      chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
-        if (chrome.runtime?.lastError) {
+      try {
+        chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
+          try {
+            if (chrome.runtime?.lastError) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
+          } catch (error) {
+            if (isExtensionContextInvalidatedError(error)) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            throw error;
+          }
+        });
+      } catch (error) {
+        if (isExtensionContextInvalidatedError(error)) {
           resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
           return;
         }
-        resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
-      });
+
+        throw error;
+      }
     });
   }
 
@@ -481,7 +515,8 @@
 
     const text = (td.textContent || "").trim();
     const hasHelperIcon = td.querySelector("img.helper-icon") !== null;
-    const canReplace = hasHelperIcon || text === "-" || text === "" || text === "&nbsp;";
+    const hasExistingLavBadge = td.querySelector("span.lav-badge[data-lav-kind='predicted']") !== null;
+    const canReplace = hasExistingLavBadge || hasHelperIcon || text === "-" || text === "" || text === "&nbsp;";
     if (!canReplace) return;
 
     td.innerHTML = "";
@@ -754,13 +789,70 @@
   function registerStorageListener() {
     if (!chrome?.storage?.onChanged) return;
 
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== "sync") return;
-      if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
+    try {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "sync") return;
+        if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
 
-      styleConfig = normalizeStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
-      refreshExistingBadges();
-      main();
+        applyStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  function registerRuntimeMessageListener() {
+    if (!chrome?.runtime?.onMessage) return;
+
+    try {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type !== "lav-style-config-updated") return;
+
+        applyStyleConfig(message.config);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  function registerFocusRefreshListener() {
+    let isRefreshing = false;
+
+    async function refreshFromStorage() {
+      if (isRefreshing) return;
+      isRefreshing = true;
+
+      try {
+        const loadedConfig = await loadStyleConfig();
+        if (!applyStyleConfig(loadedConfig)) return;
+        refreshExistingBadges();
+        main();
+      } catch (error) {
+        if (!isExtensionContextInvalidatedError(error)) {
+          throw error;
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    // Fallback refresh when returning from extension popup to the page.
+    window.addEventListener("focus", () => {
+      void refreshFromStorage();
+    });
+
+    // Some browsers restore page activity via visibility instead of focus.
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      void refreshFromStorage();
     });
   }
 
@@ -778,10 +870,17 @@
 
   loadStyleConfig()
     .then((loadedConfig) => {
-      styleConfig = loadedConfig;
+      applyStyleConfig(loadedConfig);
+    })
+    .catch((error) => {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
     })
     .finally(() => {
       registerStorageListener();
+      registerRuntimeMessageListener();
+      registerFocusRefreshListener();
       runMainWhenReady();
     });
 })();
