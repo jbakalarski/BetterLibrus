@@ -376,6 +376,22 @@ function hasAllPredictedGrades(list) {
   return unique.size === 6;
 }
 
+function hasMonotonicPredictedThresholds(list) {
+  const byGradeDesc = [...list].sort((a, b) => b.grade - a.grade);
+
+  for (let i = 1; i < byGradeDesc.length; i += 1) {
+    const higherGrade = byGradeDesc[i - 1];
+    const lowerGrade = byGradeDesc[i];
+
+    // Higher grade cannot require a lower minimum than a lower grade.
+    if (higherGrade.min < lowerGrade.min) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function collectAndValidateConfig() {
   const gradeThresholds = readThresholdSection(ui.gradeContainer);
   const pointThresholds = readThresholdSection(ui.pointContainer);
@@ -397,6 +413,14 @@ function collectAndValidateConfig() {
 
   if (!hasAllPredictedGrades(predictedPointThresholds)) {
     throw new Error("Progi przewidywanej oceny (punkty) muszą zawierać oceny 1-6.");
+  }
+
+  if (!hasMonotonicPredictedThresholds(predictedGradeThresholds)) {
+    throw new Error("Progi przewidywanej oceny (średnia) muszą maleć lub pozostać równe od oceny 6 do 1.");
+  }
+
+  if (!hasMonotonicPredictedThresholds(predictedPointThresholds)) {
+    throw new Error("Progi przewidywanej oceny (punkty) muszą maleć lub pozostać równe od oceny 6 do 1.");
   }
 
   return normalizeConfig({

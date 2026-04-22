@@ -204,7 +204,11 @@
     if (value === null || !Number.isFinite(value)) return null;
 
     const sorted = Array.isArray(thresholds)
-      ? [...thresholds].sort((a, b) => b.grade - a.grade)
+      // Select the highest threshold that still matches the value.
+      ? [...thresholds].sort((a, b) => {
+        if (b.min !== a.min) return b.min - a.min;
+        return b.grade - a.grade;
+      })
       : [];
 
     for (const threshold of sorted) {
