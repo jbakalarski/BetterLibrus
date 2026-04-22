@@ -175,6 +175,10 @@
     return hasChanged;
   }
 
+  function isExtensionContextInvalidatedError(error) {
+    return String(error?.message || error || "").includes("Extension context invalidated");
+  }
+
   function loadStyleConfig() {
     return new Promise((resolve) => {
       if (!chrome?.storage?.sync) {
@@ -182,13 +186,32 @@
         return;
       }
 
-      chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
-        if (chrome.runtime?.lastError) {
+      try {
+        chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
+          try {
+            if (chrome.runtime?.lastError) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
+          } catch (error) {
+            if (isExtensionContextInvalidatedError(error)) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            throw error;
+          }
+        });
+      } catch (error) {
+        if (isExtensionContextInvalidatedError(error)) {
           resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
           return;
         }
-        resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
-      });
+
+        throw error;
+      }
     });
   }
 
@@ -766,26 +789,38 @@
   function registerStorageListener() {
     if (!chrome?.storage?.onChanged) return;
 
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== "sync") return;
-      if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
+    try {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "sync") return;
+        if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
 
-      applyStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
-      refreshExistingBadges();
-      main();
-    });
+        applyStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
   }
 
   function registerRuntimeMessageListener() {
     if (!chrome?.runtime?.onMessage) return;
 
-    chrome.runtime.onMessage.addListener((message) => {
-      if (message?.type !== "lav-style-config-updated") return;
+    try {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type !== "lav-style-config-updated") return;
 
-      applyStyleConfig(message.config);
-      refreshExistingBadges();
-      main();
-    });
+        applyStyleConfig(message.config);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
   }
 
   function registerFocusRefreshListener() {
@@ -800,6 +835,10 @@
         if (!applyStyleConfig(loadedConfig)) return;
         refreshExistingBadges();
         main();
+      } catch (error) {
+        if (!isExtensionContextInvalidatedError(error)) {
+          throw error;
+        }
       } finally {
         isRefreshing = false;
       }
@@ -832,6 +871,11 @@
   loadStyleConfig()
     .then((loadedConfig) => {
       applyStyleConfig(loadedConfig);
+    })
+    .catch((error) => {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
     })
     .finally(() => {
       registerStorageListener();

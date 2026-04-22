@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Rozszerzenie ulepszające Librus Synergia: średnie ocen i kolejne funkcje usprawniające korzystanie z e-dziennika.",
   "permissions": [
-    "storage"
+    "storage",
+    "activeTab"
   ],
   "action": {
     "default_title": "Better Librus - ustawienia",

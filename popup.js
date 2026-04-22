@@ -353,21 +353,37 @@ async function notifyActiveTabConfigSaved(config) {
   if (!chrome?.tabs?.query || !chrome?.tabs?.sendMessage) return;
 
   await new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTabId = tabs?.[0]?.id;
-      if (!Number.isInteger(activeTabId)) {
-        resolve();
-        return;
-      }
+    const finish = () => resolve();
 
-      chrome.tabs.sendMessage(activeTabId, {
-        type: "lav-style-config-updated",
-        config,
-      }, () => {
-        // Ignore when active tab has no content script.
-        resolve();
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime?.lastError) {
+          finish();
+          return;
+        }
+
+        const activeTabId = tabs?.[0]?.id;
+        if (!Number.isInteger(activeTabId)) {
+          finish();
+          return;
+        }
+
+        chrome.tabs.sendMessage(activeTabId, {
+          type: "lav-style-config-updated",
+          config,
+        }, () => {
+          // Ignore when messaging fails or the active tab has no content script.
+          if (chrome.runtime?.lastError) {
+            finish();
+            return;
+          }
+
+          finish();
+        });
       });
-    });
+    } catch {
+      finish();
+    }
   });
 }
 
