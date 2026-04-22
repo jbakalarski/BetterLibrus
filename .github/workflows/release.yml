@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from manifest
+        id: version
+        run: echo "version=$(jq -r .version manifest.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Create zip
+        run: |
+          zip "Better Librus v${{ steps.version.outputs.version }}.zip" \
+            manifest.json \
+            content.js \
+            styles.css \
+            icon16.png \
+            icon48.png \
+            icon128.png
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          files: "Better Librus v${{ steps.version.outputs.version }}.zip"
+          fail_on_unmatched_files: true

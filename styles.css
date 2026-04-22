@@ -1,0 +1,30 @@
+/* =========================================================
+  Better Librus — injected styles
+   ========================================================= */
+
+/* ── Average badges injected into disabled cells ── */
+
+.lav-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  cursor: default;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+/* ── Colour scale ── */
+
+.lav-excellent { background: #27ae60; }
+.lav-good      { background: #2ecc71; color: #1a5c30; }
+.lav-ok        { background: #f39c12; }
+.lav-poor      { background: #e67e22; }
+.lav-bad       { background: #e74c3c; }
+.lav-neutral   { background: #95a5a6; }
+
+.lav-point-avg-cell {
+  text-align: center;
+}

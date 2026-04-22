@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Better Librus",
+  "version": "1.0.0",
+  "description": "Rozszerzenie ulepszające Librus Synergia: średnie ocen i kolejne funkcje usprawniające korzystanie z e-dziennika.",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://synergia.librus.pl/przegladaj_oceny/uczen*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
