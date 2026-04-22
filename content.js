@@ -17,6 +17,7 @@
   const EXTENSION_NAME = "Better Librus";
   const CALCULATED_BY_LABEL = `obliczone przez ${EXTENSION_NAME}`;
   const STYLE_CONFIG_STORAGE_KEY = "lavAverageStyleConfigV1";
+  const PREDICTED_GRADES = [6, 5, 4, 3, 2, 1];
 
   const SPECIAL_GRADES = new Set(["np", "nb", "nk", "bz", "uł", "nł", "zl", "nz", "zw", "uc", "nu"]);
 
@@ -36,6 +37,30 @@
       { min: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
       { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
     ],
+    predictedGradeThresholds: [
+      { grade: 6, min: 5.75 },
+      { grade: 5, min: 4.75 },
+      { grade: 4, min: 3.75 },
+      { grade: 3, min: 2.75 },
+      { grade: 2, min: 1.75 },
+      { grade: 1, min: 0.00 },
+    ],
+    predictedPointThresholds: [
+      { grade: 6, min: 100.00 },
+      { grade: 5, min: 90.00 },
+      { grade: 4, min: 70.00 },
+      { grade: 3, min: 50.00 },
+      { grade: 2, min: 40.00 },
+      { grade: 1, min: 0.00 },
+    ],
+    predictedGradeStyles: {
+      1: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" },
+      2: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" },
+      3: { background: "#f39c12", text: "#ffffff", border: "#d8870d" },
+      4: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" },
+      5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
+      6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
+    },
   });
 
   let styleConfig = cloneStyleConfig(DEFAULT_STYLE_CONFIG);
@@ -53,6 +78,12 @@
   function normalizeThresholdValue(value, fallback) {
     const parsed = parseFloat(value);
     if (!Number.isFinite(parsed)) return fallback;
+    return parsed;
+  }
+
+  function normalizeGradeValue(value, fallback) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 6) return fallback;
     return parsed;
   }
 
@@ -83,11 +114,54 @@
     const defaults = DEFAULT_STYLE_CONFIG;
     const gradeThresholds = normalizeThresholdList(rawConfig?.gradeThresholds, defaults.gradeThresholds);
     const pointThresholds = normalizeThresholdList(rawConfig?.pointThresholds, defaults.pointThresholds);
+    const predictedGradeThresholds = normalizePredictedThresholdList(rawConfig?.predictedGradeThresholds, defaults.predictedGradeThresholds);
+    const predictedPointThresholds = normalizePredictedThresholdList(rawConfig?.predictedPointThresholds, defaults.predictedPointThresholds);
+    const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, defaults.predictedGradeStyles);
 
     return {
       gradeThresholds,
       pointThresholds,
+      predictedGradeThresholds,
+      predictedPointThresholds,
+      predictedGradeStyles,
     };
+  }
+
+  function normalizePredictedThresholdList(rawList, defaultList) {
+    const fallbackByGrade = new Map(defaultList.map((entry) => [entry.grade, entry]));
+    const source = Array.isArray(rawList) ? rawList : [];
+    const sourceByGrade = new Map();
+
+    for (const entry of source) {
+      const grade = normalizeGradeValue(entry?.grade, null);
+      if (grade === null) continue;
+      sourceByGrade.set(grade, entry);
+    }
+
+    return PREDICTED_GRADES
+      .map((grade) => {
+        const fallback = fallbackByGrade.get(grade) || { grade, min: 0 };
+        const current = sourceByGrade.get(grade);
+        return {
+          grade,
+          min: normalizeThresholdValue(current?.min, fallback.min),
+        };
+      })
+      .sort((a, b) => b.grade - a.grade);
+  }
+
+  function normalizePredictedGradeStyles(rawStyles, defaultStyles) {
+    const normalized = {};
+    for (const grade of PREDICTED_GRADES) {
+      const key = String(grade);
+      const fallback = defaultStyles[key] || defaultStyles[grade];
+      normalized[key] = {
+        background: normalizeHexColor(rawStyles?.[key]?.background, fallback.background),
+        text: normalizeHexColor(rawStyles?.[key]?.text, fallback.text),
+        border: normalizeHexColor(rawStyles?.[key]?.border, fallback.border),
+      };
+    }
+    return normalized;
   }
 
   function loadStyleConfig() {
@@ -126,6 +200,27 @@
     return pickThresholdStyle(percentage, styleConfig.pointThresholds);
   }
 
+  function predictGradeFromValue(value, thresholds) {
+    if (value === null || !Number.isFinite(value)) return null;
+
+    const sorted = Array.isArray(thresholds)
+      ? [...thresholds].sort((a, b) => b.grade - a.grade)
+      : [];
+
+    for (const threshold of sorted) {
+      if (value >= threshold.min) return threshold.grade;
+    }
+
+    return sorted[sorted.length - 1]?.grade || 1;
+  }
+
+  function styleForPredictedGrade(grade) {
+    const key = String(grade);
+    return styleConfig.predictedGradeStyles?.[key]
+      || DEFAULT_STYLE_CONFIG.predictedGradeStyles[key]
+      || DEFAULT_STYLE_CONFIG.predictedGradeStyles["1"];
+  }
+
   function applyBadgeStyle(badge, style) {
     badge.style.backgroundColor = style.background;
     badge.style.color = style.text;
@@ -142,6 +237,9 @@
         applyBadgeStyle(badge, styleForGradeAverage(value));
       } else if (badge.dataset.lavKind === "point") {
         applyBadgeStyle(badge, pickThresholdStyle(value, styleConfig.pointThresholds));
+      } else if (badge.dataset.lavKind === "predicted") {
+        const roundedGrade = Math.round(value);
+        applyBadgeStyle(badge, styleForPredictedGrade(roundedGrade));
       }
     }
   }
@@ -370,6 +468,33 @@
   }
 
   /**
+   * Replaces predicted-grade placeholder with a computed predicted grade badge.
+   */
+  function replacePredictedGradeCell(td, grade, label) {
+    if (!td) return;
+    if (td.querySelector("span.grade-box")) return;
+    if (grade === null) return;
+
+    const text = (td.textContent || "").trim();
+    const hasHelperIcon = td.querySelector("img.helper-icon") !== null;
+    const canReplace = hasHelperIcon || text === "-" || text === "" || text === "&nbsp;";
+    if (!canReplace) return;
+
+    td.innerHTML = "";
+    td.classList.add("center");
+
+    const badge = document.createElement("span");
+    badge.className = "lav-badge";
+    badge.title = `${label}: ${grade} (${CALCULATED_BY_LABEL})`;
+    badge.textContent = String(grade);
+    badge.dataset.lavKind = "predicted";
+    badge.dataset.lavValue = String(grade);
+
+    applyBadgeStyle(badge, styleForPredictedGrade(grade));
+    td.appendChild(badge);
+  }
+
+  /**
    * Ensures point-grades table has average columns similar to regular grades.
    */
   function ensurePointAverageColumns(pointTable) {
@@ -489,6 +614,8 @@
     const period2Cell = cells[nodeCellIndex + 6];
     const period2AvgCell = cells[nodeCellIndex + 7];
     const yearAvgCell = cells[nodeCellIndex + 9];
+    const period1PredCell = cells[nodeCellIndex + 5];
+    const yearPredCell = cells[nodeCellIndex + 11];
     if (!period1Cell || !period1AvgCell || !period2Cell || !period2AvgCell || !yearAvgCell) return;
 
     const period1Entries = extractPointEntriesFromCell(period1Cell);
@@ -497,17 +624,21 @@
     const period1Avg = calcPointRatio(period1Entries);
     const period2Avg = calcPointRatio(period2Entries);
     const yearAvg = calcPointRatio([...period1Entries, ...period2Entries]);
+    const period1Predicted = predictGradeFromValue(period1Avg === null ? null : (period1Avg * 100), styleConfig.predictedPointThresholds);
+    const yearPredicted = predictGradeFromValue(yearAvg === null ? null : (yearAvg * 100), styleConfig.predictedPointThresholds);
 
     replacePointAvgCell(period1AvgCell, period1Avg, "Śr. okresu 1 (punkty)");
     replacePointAvgCell(period2AvgCell, period2Avg, "Śr. okresu 2 (punkty)");
     replacePointAvgCell(yearAvgCell, yearAvg, "Śr. roczna (punkty)");
+    replacePredictedGradeCell(period1PredCell, period1Predicted, "Przewidywana ocena śródroczna");
+    replacePredictedGradeCell(yearPredCell, yearPredicted, "Przewidywana ocena roczna");
   }
 
   /**
    * Injects the computed averages into the "Śr.I" and "Śr.II" cells
    * of a subject row in the main decorated table.
    */
-  function injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal) {
+  function injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal, predicted1, predictedYear) {
     const cells = Array.from(subjectRow.querySelectorAll("td"));
     const nodeImg = subjectRow.querySelector("img[id$='_node']");
     const replacedCells = new Set();
@@ -532,8 +663,10 @@
       const nodeCellIndex = cells.findIndex((cell) => cell.contains(nodeImg));
       if (nodeCellIndex >= 0) {
         replaceByIndex(nodeCellIndex + 3, avg1, "Śr. okresu 1");
+        replacePredictedGradeCell(cells[nodeCellIndex + 5], predicted1, "Przewidywana ocena śródroczna");
         replaceByIndex(nodeCellIndex + 7, avg2, "Śr. okresu 2");
         replaceByIndex(nodeCellIndex + 9, avgTotal, "Śr. roczna");
+        replacePredictedGradeCell(cells[nodeCellIndex + 11], predictedYear, "Przewidywana ocena roczna");
       }
     }
 
@@ -552,8 +685,12 @@
 
       if (tdTitle.includes("pierwszego okresu") || title.includes("pierwszego okresu")) {
         replaceDisabledAvgCell(td, avg1, "Śr. okresu 1");
+      } else if (tdTitle.includes("przewidywana ocena śródroczna") || title.includes("przewidywana ocena śródroczna")) {
+        replacePredictedGradeCell(td, predicted1, "Przewidywana ocena śródroczna");
       } else if (tdTitle.includes("drugiego okresu") || title.includes("drugiego okresu")) {
         replaceDisabledAvgCell(td, avg2, "Śr. okresu 2");
+      } else if (tdTitle.includes("przewidywana ocena roczna") || title.includes("przewidywana ocena roczna")) {
+        replacePredictedGradeCell(td, predictedYear, "Przewidywana ocena roczna");
       } else if (tdTitle.includes("roczna") || title.includes("roczna")) {
         replaceDisabledAvgCell(td, avgTotal, "Śr. roczna");
       }
@@ -578,12 +715,10 @@
     // Annual average = weighted average across all grades from both periods
     const allGrades = [...period1, ...period2];
     const avgTotal = calcWeightedAverage(allGrades);
+    const predicted1 = predictGradeFromValue(avg1, styleConfig.predictedGradeThresholds);
+    const predictedYear = predictGradeFromValue(avgTotal, styleConfig.predictedGradeThresholds);
 
-    // Check if this row actually has any disabled average cells before touching it
-    const hasDisabledAvg = subjectRow.querySelector("img.helper-icon") !== null;
-    if (!hasDisabledAvg) return;
-
-    injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal);
+    injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal, predicted1, predictedYear);
   }
 
   // ─── Main orchestration ────────────────────────────────────────────────────

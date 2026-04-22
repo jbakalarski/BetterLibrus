@@ -3,31 +3,62 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Better Librus - style średnich</title>
+  <title>Better Librus - ustawienia ocen</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <main class="panel">
     <header class="panel-header">
       <p class="eyebrow">Better Librus</p>
-      <h1>Style średnich</h1>
-      <p class="subtitle">Ustaw własne progi i wygląd dla średnich ocen oraz procentów.</p>
+      <h1>Ustawienia ocen</h1>
+      <p class="subtitle">Skonfiguruj wygląd średnich i przewidywanych ocen.</p>
     </header>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>Średnie ocen</h2>
-        <button id="add-grade-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
-      </div>
-      <div id="grade-thresholds" class="threshold-list"></div>
+    <nav class="tabs" aria-label="Zakładki ustawień">
+      <button id="tab-avg" type="button" class="tab is-active" data-tab="avg" aria-controls="tab-panel-avg" aria-selected="true">Średnie</button>
+      <button id="tab-pred" type="button" class="tab" data-tab="pred" aria-controls="tab-panel-pred" aria-selected="false">Przewidywane oceny</button>
+    </nav>
+
+    <section id="tab-panel-avg" class="tab-panel is-active" data-panel="avg">
+      <section class="card">
+        <div class="section-head">
+          <h2>Średnie ocen</h2>
+          <button id="add-grade-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
+        </div>
+        <div id="grade-thresholds" class="threshold-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Średnie procentowe</h2>
+          <button id="add-point-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
+        </div>
+        <div id="point-thresholds" class="threshold-list"></div>
+      </section>
     </section>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>Średnie procentowe</h2>
-        <button id="add-point-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
-      </div>
-      <div id="point-thresholds" class="threshold-list"></div>
+    <section id="tab-panel-pred" class="tab-panel" data-panel="pred" hidden>
+      <section class="card">
+        <div class="section-head">
+          <h2>Progi przewidywanej oceny (średnia)</h2>
+        </div>
+        <div id="pred-grade-thresholds" class="threshold-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Progi przewidywanej oceny (punkty)</h2>
+        </div>
+        <div id="pred-point-thresholds" class="threshold-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>Style przewidywanych ocen</h2>
+        </div>
+        <p class="subnote">Ustaw wygląd dla ocen: 1, 2, 3, 4, 5, 6.</p>
+        <div id="pred-grade-styles" class="threshold-list"></div>
+      </section>
     </section>
 
     <footer class="panel-footer">
@@ -68,6 +99,51 @@
       </div>
 
       <button type="button" class="btn btn-danger remove-threshold">Usuń</button>
+    </div>
+  </template>
+
+  <template id="pred-threshold-template">
+    <div class="threshold-row pred-threshold-row">
+      <label class="threshold-grade-value">
+        Ocena
+        <input type="number" class="input-grade" min="1" max="6" step="1" readonly />
+      </label>
+
+      <label class="threshold-value">
+        Próg od
+        <div class="value-wrap">
+          <input type="number" class="input-min" step="0.01" />
+          <span class="suffix"></span>
+        </div>
+      </label>
+    </div>
+  </template>
+
+  <template id="pred-style-template">
+    <div class="threshold-row pred-style-row">
+      <label class="threshold-grade-value">
+        Ocena
+        <input type="number" class="input-grade" min="1" max="6" step="1" readonly />
+      </label>
+
+      <label>
+        Tło
+        <input type="color" class="input-bg" />
+      </label>
+
+      <label>
+        Tekst
+        <input type="color" class="input-text" />
+      </label>
+
+      <label>
+        Ramka
+        <input type="color" class="input-border" />
+      </label>
+
+      <div class="preview-wrap">
+        <span class="preview-badge">5</span>
+      </div>
     </div>
   </template>
 
