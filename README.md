@@ -54,6 +54,9 @@
 ## 🚀 Features
 * Displays calculated grade averages in the grades view
 * Supports both standard grades and point-based grading
+* Displays final and midterm grade predictions
+* Allows users to customize styles and thresholds for grade averages and predictions
+* Applies new settings in real time without the need to refresh the page
 * Improves data readability without altering the behavior of Librus itself
 
 ## 💲 Support
