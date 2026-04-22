@@ -16,8 +16,135 @@
 
   const EXTENSION_NAME = "Better Librus";
   const CALCULATED_BY_LABEL = `obliczone przez ${EXTENSION_NAME}`;
+  const STYLE_CONFIG_STORAGE_KEY = "lavAverageStyleConfigV1";
 
   const SPECIAL_GRADES = new Set(["np", "nb", "nk", "bz", "uł", "nł", "zl", "nz", "zw", "uc", "nu"]);
+
+  // Default style config preserves current behavior.
+  const DEFAULT_STYLE_CONFIG = Object.freeze({
+    gradeThresholds: [
+      { min: 4.75, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+      { min: 3.75, style: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" } },
+      { min: 2.75, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+      { min: 1.75, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+      { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+    ],
+    pointThresholds: [
+      { min: 90.00, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+      { min: 70.00, style: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" } },
+      { min: 50.00, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+      { min: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+      { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+    ],
+  });
+
+  let styleConfig = cloneStyleConfig(DEFAULT_STYLE_CONFIG);
+
+  function cloneStyleConfig(config) {
+    return JSON.parse(JSON.stringify(config));
+  }
+
+  function normalizeHexColor(value, fallback) {
+    const text = String(value || "").trim();
+    if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+    return fallback;
+  }
+
+  function normalizeThresholdValue(value, fallback) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return parsed;
+  }
+
+  function normalizeThresholdList(rawList, defaultList) {
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      return cloneStyleConfig(defaultList);
+    }
+
+    const normalized = rawList
+      .map((entry, index) => {
+        const fallback = defaultList[Math.min(index, defaultList.length - 1)];
+        const style = entry?.style || {};
+        return {
+          min: normalizeThresholdValue(entry?.min, fallback.min),
+          style: {
+            background: normalizeHexColor(style.background, fallback.style.background),
+            text: normalizeHexColor(style.text, fallback.style.text),
+            border: normalizeHexColor(style.border, fallback.style.border),
+          },
+        };
+      })
+      .sort((a, b) => b.min - a.min);
+
+    return normalized;
+  }
+
+  function normalizeStyleConfig(rawConfig) {
+    const defaults = DEFAULT_STYLE_CONFIG;
+    const gradeThresholds = normalizeThresholdList(rawConfig?.gradeThresholds, defaults.gradeThresholds);
+    const pointThresholds = normalizeThresholdList(rawConfig?.pointThresholds, defaults.pointThresholds);
+
+    return {
+      gradeThresholds,
+      pointThresholds,
+    };
+  }
+
+  function loadStyleConfig() {
+    return new Promise((resolve) => {
+      if (!chrome?.storage?.sync) {
+        resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+        return;
+      }
+
+      chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
+        if (chrome.runtime?.lastError) {
+          resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+          return;
+        }
+        resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
+      });
+    });
+  }
+
+  function pickThresholdStyle(value, thresholds) {
+    const sorted = thresholds || [];
+    for (const threshold of sorted) {
+      if (value >= threshold.min) return threshold.style;
+    }
+    return sorted[sorted.length - 1]?.style || DEFAULT_STYLE_CONFIG.gradeThresholds[DEFAULT_STYLE_CONFIG.gradeThresholds.length - 1].style;
+  }
+
+  function styleForGradeAverage(avg) {
+    if (avg === null) return DEFAULT_STYLE_CONFIG.gradeThresholds[DEFAULT_STYLE_CONFIG.gradeThresholds.length - 1].style;
+    return pickThresholdStyle(avg, styleConfig.gradeThresholds);
+  }
+
+  function styleForPointRatio(ratio) {
+    if (ratio === null) return DEFAULT_STYLE_CONFIG.pointThresholds[DEFAULT_STYLE_CONFIG.pointThresholds.length - 1].style;
+    const percentage = ratio * 100;
+    return pickThresholdStyle(percentage, styleConfig.pointThresholds);
+  }
+
+  function applyBadgeStyle(badge, style) {
+    badge.style.backgroundColor = style.background;
+    badge.style.color = style.text;
+    badge.style.borderColor = style.border;
+  }
+
+  function refreshExistingBadges() {
+    const badges = document.querySelectorAll("span.lav-badge[data-lav-kind]");
+    for (const badge of badges) {
+      const value = parseFloat(badge.dataset.lavValue || "");
+      if (!Number.isFinite(value)) continue;
+
+      if (badge.dataset.lavKind === "grade") {
+        applyBadgeStyle(badge, styleForGradeAverage(value));
+      } else if (badge.dataset.lavKind === "point") {
+        applyBadgeStyle(badge, pickThresholdStyle(value, styleConfig.pointThresholds));
+      }
+    }
+  }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -75,18 +202,6 @@
    */
   function formatPointAvg(ratio) {
     return `${(ratio * 100).toFixed(1)}%`;
-  }
-
-  /**
-   * Returns a CSS color class based on the average value.
-   */
-  function colorForAvg(avg) {
-    if (avg === null) return "lav-neutral";
-    if (avg >= 4.75) return "lav-excellent";
-    if (avg >= 3.75) return "lav-good";
-    if (avg >= 2.75) return "lav-ok";
-    if (avg >= 1.75) return "lav-poor";
-    return "lav-bad";
   }
 
   // ─── Grade extraction ──────────────────────────────────────────────────────
@@ -243,9 +358,13 @@
     if (avg === null) return;
 
     const badge = document.createElement("span");
-    badge.className = `lav-badge ${colorForAvg(avg)}`;
+    badge.className = "lav-badge";
     badge.title = `${label}: ${formatAvg(avg)} (${CALCULATED_BY_LABEL})`;
     badge.textContent = formatAvg(avg);
+    badge.dataset.lavKind = "grade";
+    badge.dataset.lavValue = String(avg);
+
+    applyBadgeStyle(badge, styleForGradeAverage(avg));
 
     td.appendChild(badge);
   }
@@ -335,10 +454,16 @@
     if (ratio === null) return;
 
     const gradeEquivalent = round2(ratio * 6);
+    const percentage = ratio * 100;
     const badge = document.createElement("span");
-    badge.className = `lav-badge ${colorForAvg(gradeEquivalent)}`;
+    badge.className = "lav-badge";
     badge.title = `${label}: ${formatPointAvg(ratio)} (~${gradeEquivalent.toFixed(2)} / 6.00) (${CALCULATED_BY_LABEL})`;
     badge.textContent = formatPointAvg(ratio);
+    badge.dataset.lavKind = "point";
+    badge.dataset.lavValue = String(percentage);
+
+    applyBadgeStyle(badge, styleForPointRatio(ratio));
+
     targetCell.appendChild(badge);
   }
 
@@ -483,13 +608,41 @@
         processSubjectRow(row);
       }
     }
+
+    refreshExistingBadges();
   }
 
-  // Wait for page to be fully ready (Librus uses JS to render some elements)
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", main);
-  } else {
+  function registerStorageListener() {
+    if (!chrome?.storage?.onChanged) return;
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "sync") return;
+      if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
+
+      styleConfig = normalizeStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
+      refreshExistingBadges();
+      main();
+    });
+  }
+
+  function runMainWhenReady() {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        setTimeout(main, 800);
+      }, { once: true });
+      return;
+    }
+
     // Small delay to let Librus JS finish rendering
     setTimeout(main, 800);
   }
+
+  loadStyleConfig()
+    .then((loadedConfig) => {
+      styleConfig = loadedConfig;
+    })
+    .finally(() => {
+      registerStorageListener();
+      runMainWhenReady();
+    });
 })();

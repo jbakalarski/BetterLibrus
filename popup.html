@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Better Librus - style średnich</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="panel">
+    <header class="panel-header">
+      <p class="eyebrow">Better Librus</p>
+      <h1>Style średnich</h1>
+      <p class="subtitle">Ustaw własne progi i wygląd dla średnich ocen oraz procentów.</p>
+    </header>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Średnie ocen</h2>
+        <button id="add-grade-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
+      </div>
+      <div id="grade-thresholds" class="threshold-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Średnie procentowe</h2>
+        <button id="add-point-threshold" type="button" class="btn btn-ghost">Dodaj próg</button>
+      </div>
+      <div id="point-thresholds" class="threshold-list"></div>
+    </section>
+
+    <footer class="panel-footer">
+      <button id="reset-defaults" type="button" class="btn btn-muted">Przywróć domyślne</button>
+      <button id="save-config" type="button" class="btn btn-primary">Zapisz ustawienia</button>
+    </footer>
+
+    <p id="status" class="status" aria-live="polite"></p>
+  </main>
+
+  <template id="threshold-template">
+    <div class="threshold-row">
+      <label class="threshold-value">
+        Próg od
+        <div class="value-wrap">
+          <input type="number" class="input-min" step="0.01" />
+          <span class="suffix"></span>
+        </div>
+      </label>
+
+      <label>
+        Tło
+        <input type="color" class="input-bg" />
+      </label>
+
+      <label>
+        Tekst
+        <input type="color" class="input-text" />
+      </label>
+
+      <label>
+        Ramka
+        <input type="color" class="input-border" />
+      </label>
+
+      <div class="preview-wrap">
+        <span class="preview-badge">4.25</span>
+      </div>
+
+      <button type="button" class="btn btn-danger remove-threshold">Usuń</button>
+    </div>
+  </template>
+
+  <script src="popup.js"></script>
+</body>
+</html>
