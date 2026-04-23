@@ -16,8 +16,273 @@
 
   const EXTENSION_NAME = "Better Librus";
   const CALCULATED_BY_LABEL = `obliczone przez ${EXTENSION_NAME}`;
+  const STYLE_CONFIG_STORAGE_KEY = "lavAverageStyleConfigV1";
+  const PREDICTED_GRADES = [6, 5, 4, 3, 2, 1];
 
   const SPECIAL_GRADES = new Set(["np", "nb", "nk", "bz", "uł", "nł", "zl", "nz", "zw", "uc", "nu"]);
+
+  // Default style config preserves current behavior.
+  const DEFAULT_STYLE_CONFIG = Object.freeze({
+    gradeThresholds: [
+      { min: 5.75, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
+      { min: 4.75, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+      { min: 3.75, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
+      { min: 2.75, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+      { min: 1.75, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+      { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+    ],
+    pointThresholds: [
+      { min: 100.00, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
+      { min: 90.00, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+      { min: 70.00, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
+      { min: 50.00, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+      { min: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+      { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+    ],
+    predictedGradeThresholds: [
+      { grade: 6, min: 5.75 },
+      { grade: 5, min: 4.75 },
+      { grade: 4, min: 3.75 },
+      { grade: 3, min: 2.75 },
+      { grade: 2, min: 1.75 },
+      { grade: 1, min: 0.00 },
+    ],
+    predictedPointThresholds: [
+      { grade: 6, min: 100.00 },
+      { grade: 5, min: 90.00 },
+      { grade: 4, min: 70.00 },
+      { grade: 3, min: 50.00 },
+      { grade: 2, min: 40.00 },
+      { grade: 1, min: 0.00 },
+    ],
+    predictedGradeStyles: {
+      1: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" },
+      2: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" },
+      3: { background: "#f39c12", text: "#ffffff", border: "#d8870d" },
+      4: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" },
+      5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
+      6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
+    },
+  });
+
+  let styleConfig = cloneStyleConfig(DEFAULT_STYLE_CONFIG);
+  let styleConfigSignature = JSON.stringify(styleConfig);
+
+  function cloneStyleConfig(config) {
+    return JSON.parse(JSON.stringify(config));
+  }
+
+  function normalizeHexColor(value, fallback) {
+    const text = String(value || "").trim();
+    if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+    return fallback;
+  }
+
+  function normalizeThresholdValue(value, fallback) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return parsed;
+  }
+
+  function normalizeGradeValue(value, fallback) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 6) return fallback;
+    return parsed;
+  }
+
+  function normalizeThresholdList(rawList, defaultList) {
+    if (!Array.isArray(rawList) || rawList.length === 0) {
+      return cloneStyleConfig(defaultList);
+    }
+
+    const normalized = rawList
+      .map((entry, index) => {
+        const fallback = defaultList[Math.min(index, defaultList.length - 1)];
+        const style = entry?.style || {};
+        return {
+          min: normalizeThresholdValue(entry?.min, fallback.min),
+          style: {
+            background: normalizeHexColor(style.background, fallback.style.background),
+            text: normalizeHexColor(style.text, fallback.style.text),
+            border: normalizeHexColor(style.border, fallback.style.border),
+          },
+        };
+      })
+      .sort((a, b) => b.min - a.min);
+
+    return normalized;
+  }
+
+  function normalizeStyleConfig(rawConfig) {
+    const defaults = DEFAULT_STYLE_CONFIG;
+    const gradeThresholds = normalizeThresholdList(rawConfig?.gradeThresholds, defaults.gradeThresholds);
+    const pointThresholds = normalizeThresholdList(rawConfig?.pointThresholds, defaults.pointThresholds);
+    const predictedGradeThresholds = normalizePredictedThresholdList(rawConfig?.predictedGradeThresholds, defaults.predictedGradeThresholds);
+    const predictedPointThresholds = normalizePredictedThresholdList(rawConfig?.predictedPointThresholds, defaults.predictedPointThresholds);
+    const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, defaults.predictedGradeStyles);
+
+    return {
+      gradeThresholds,
+      pointThresholds,
+      predictedGradeThresholds,
+      predictedPointThresholds,
+      predictedGradeStyles,
+    };
+  }
+
+  function normalizePredictedThresholdList(rawList, defaultList) {
+    const fallbackByGrade = new Map(defaultList.map((entry) => [entry.grade, entry]));
+    const source = Array.isArray(rawList) ? rawList : [];
+    const sourceByGrade = new Map();
+
+    for (const entry of source) {
+      const grade = normalizeGradeValue(entry?.grade, null);
+      if (grade === null) continue;
+      sourceByGrade.set(grade, entry);
+    }
+
+    return PREDICTED_GRADES
+      .map((grade) => {
+        const fallback = fallbackByGrade.get(grade) || { grade, min: 0 };
+        const current = sourceByGrade.get(grade);
+        return {
+          grade,
+          min: normalizeThresholdValue(current?.min, fallback.min),
+        };
+      })
+      .sort((a, b) => b.grade - a.grade);
+  }
+
+  function normalizePredictedGradeStyles(rawStyles, defaultStyles) {
+    const normalized = {};
+    for (const grade of PREDICTED_GRADES) {
+      const key = String(grade);
+      const fallback = defaultStyles[key] || defaultStyles[grade];
+      normalized[key] = {
+        background: normalizeHexColor(rawStyles?.[key]?.background, fallback.background),
+        text: normalizeHexColor(rawStyles?.[key]?.text, fallback.text),
+        border: normalizeHexColor(rawStyles?.[key]?.border, fallback.border),
+      };
+    }
+    return normalized;
+  }
+
+  function applyStyleConfig(nextConfig) {
+    const normalized = normalizeStyleConfig(nextConfig);
+    const nextSignature = JSON.stringify(normalized);
+    const hasChanged = nextSignature !== styleConfigSignature;
+
+    styleConfig = normalized;
+    styleConfigSignature = nextSignature;
+    return hasChanged;
+  }
+
+  function isExtensionContextInvalidatedError(error) {
+    return String(error?.message || error || "").includes("Extension context invalidated");
+  }
+
+  function loadStyleConfig() {
+    return new Promise((resolve) => {
+      if (!chrome?.storage?.sync) {
+        resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+        return;
+      }
+
+      try {
+        chrome.storage.sync.get(STYLE_CONFIG_STORAGE_KEY, (result) => {
+          try {
+            if (chrome.runtime?.lastError) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            resolve(normalizeStyleConfig(result?.[STYLE_CONFIG_STORAGE_KEY]));
+          } catch (error) {
+            if (isExtensionContextInvalidatedError(error)) {
+              resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+              return;
+            }
+
+            throw error;
+          }
+        });
+      } catch (error) {
+        if (isExtensionContextInvalidatedError(error)) {
+          resolve(cloneStyleConfig(DEFAULT_STYLE_CONFIG));
+          return;
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  function pickThresholdStyle(value, thresholds) {
+    const sorted = thresholds || [];
+    for (const threshold of sorted) {
+      if (value >= threshold.min) return threshold.style;
+    }
+    return sorted[sorted.length - 1]?.style || DEFAULT_STYLE_CONFIG.gradeThresholds[DEFAULT_STYLE_CONFIG.gradeThresholds.length - 1].style;
+  }
+
+  function styleForGradeAverage(avg) {
+    if (avg === null) return DEFAULT_STYLE_CONFIG.gradeThresholds[DEFAULT_STYLE_CONFIG.gradeThresholds.length - 1].style;
+    return pickThresholdStyle(avg, styleConfig.gradeThresholds);
+  }
+
+  function styleForPointRatio(ratio) {
+    if (ratio === null) return DEFAULT_STYLE_CONFIG.pointThresholds[DEFAULT_STYLE_CONFIG.pointThresholds.length - 1].style;
+    const percentage = ratio * 100;
+    return pickThresholdStyle(percentage, styleConfig.pointThresholds);
+  }
+
+  function predictGradeFromValue(value, thresholds) {
+    if (value === null || !Number.isFinite(value)) return null;
+
+    const sorted = Array.isArray(thresholds)
+      // Select the highest threshold that still matches the value.
+      ? [...thresholds].sort((a, b) => {
+        if (b.min !== a.min) return b.min - a.min;
+        return b.grade - a.grade;
+      })
+      : [];
+
+    for (const threshold of sorted) {
+      if (value >= threshold.min) return threshold.grade;
+    }
+
+    return sorted[sorted.length - 1]?.grade || 1;
+  }
+
+  function styleForPredictedGrade(grade) {
+    const key = String(grade);
+    return styleConfig.predictedGradeStyles?.[key]
+      || DEFAULT_STYLE_CONFIG.predictedGradeStyles[key]
+      || DEFAULT_STYLE_CONFIG.predictedGradeStyles["1"];
+  }
+
+  function applyBadgeStyle(badge, style) {
+    badge.style.backgroundColor = style.background;
+    badge.style.color = style.text;
+    badge.style.borderColor = style.border;
+  }
+
+  function refreshExistingBadges() {
+    const badges = document.querySelectorAll("span.lav-badge[data-lav-kind]");
+    for (const badge of badges) {
+      const value = parseFloat(badge.dataset.lavValue || "");
+      if (!Number.isFinite(value)) continue;
+
+      if (badge.dataset.lavKind === "grade") {
+        applyBadgeStyle(badge, styleForGradeAverage(value));
+      } else if (badge.dataset.lavKind === "point") {
+        applyBadgeStyle(badge, pickThresholdStyle(value, styleConfig.pointThresholds));
+      } else if (badge.dataset.lavKind === "predicted") {
+        const roundedGrade = Math.round(value);
+        applyBadgeStyle(badge, styleForPredictedGrade(roundedGrade));
+      }
+    }
+  }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -75,18 +340,6 @@
    */
   function formatPointAvg(ratio) {
     return `${(ratio * 100).toFixed(1)}%`;
-  }
-
-  /**
-   * Returns a CSS color class based on the average value.
-   */
-  function colorForAvg(avg) {
-    if (avg === null) return "lav-neutral";
-    if (avg >= 4.75) return "lav-excellent";
-    if (avg >= 3.75) return "lav-good";
-    if (avg >= 2.75) return "lav-ok";
-    if (avg >= 1.75) return "lav-poor";
-    return "lav-bad";
   }
 
   // ─── Grade extraction ──────────────────────────────────────────────────────
@@ -243,10 +496,42 @@
     if (avg === null) return;
 
     const badge = document.createElement("span");
-    badge.className = `lav-badge ${colorForAvg(avg)}`;
+    badge.className = "lav-badge";
     badge.title = `${label}: ${formatAvg(avg)} (${CALCULATED_BY_LABEL})`;
     badge.textContent = formatAvg(avg);
+    badge.dataset.lavKind = "grade";
+    badge.dataset.lavValue = String(avg);
 
+    applyBadgeStyle(badge, styleForGradeAverage(avg));
+
+    td.appendChild(badge);
+  }
+
+  /**
+   * Replaces predicted-grade placeholder with a computed predicted grade badge.
+   */
+  function replacePredictedGradeCell(td, grade, label) {
+    if (!td) return;
+    if (td.querySelector("span.grade-box")) return;
+    if (grade === null) return;
+
+    const text = (td.textContent || "").trim();
+    const hasHelperIcon = td.querySelector("img.helper-icon") !== null;
+    const hasExistingLavBadge = td.querySelector("span.lav-badge[data-lav-kind='predicted']") !== null;
+    const canReplace = hasExistingLavBadge || hasHelperIcon || text === "-" || text === "" || text === "&nbsp;";
+    if (!canReplace) return;
+
+    td.innerHTML = "";
+    td.classList.add("center");
+
+    const badge = document.createElement("span");
+    badge.className = "lav-badge";
+    badge.title = `${label}: ${grade} (${CALCULATED_BY_LABEL})`;
+    badge.textContent = String(grade);
+    badge.dataset.lavKind = "predicted";
+    badge.dataset.lavValue = String(grade);
+
+    applyBadgeStyle(badge, styleForPredictedGrade(grade));
     td.appendChild(badge);
   }
 
@@ -335,10 +620,16 @@
     if (ratio === null) return;
 
     const gradeEquivalent = round2(ratio * 6);
+    const percentage = ratio * 100;
     const badge = document.createElement("span");
-    badge.className = `lav-badge ${colorForAvg(gradeEquivalent)}`;
+    badge.className = "lav-badge";
     badge.title = `${label}: ${formatPointAvg(ratio)} (~${gradeEquivalent.toFixed(2)} / 6.00) (${CALCULATED_BY_LABEL})`;
     badge.textContent = formatPointAvg(ratio);
+    badge.dataset.lavKind = "point";
+    badge.dataset.lavValue = String(percentage);
+
+    applyBadgeStyle(badge, styleForPointRatio(ratio));
+
     targetCell.appendChild(badge);
   }
 
@@ -364,6 +655,8 @@
     const period2Cell = cells[nodeCellIndex + 6];
     const period2AvgCell = cells[nodeCellIndex + 7];
     const yearAvgCell = cells[nodeCellIndex + 9];
+    const period1PredCell = cells[nodeCellIndex + 5];
+    const yearPredCell = cells[nodeCellIndex + 11];
     if (!period1Cell || !period1AvgCell || !period2Cell || !period2AvgCell || !yearAvgCell) return;
 
     const period1Entries = extractPointEntriesFromCell(period1Cell);
@@ -372,17 +665,21 @@
     const period1Avg = calcPointRatio(period1Entries);
     const period2Avg = calcPointRatio(period2Entries);
     const yearAvg = calcPointRatio([...period1Entries, ...period2Entries]);
+    const period1Predicted = predictGradeFromValue(period1Avg === null ? null : (period1Avg * 100), styleConfig.predictedPointThresholds);
+    const yearPredicted = predictGradeFromValue(yearAvg === null ? null : (yearAvg * 100), styleConfig.predictedPointThresholds);
 
     replacePointAvgCell(period1AvgCell, period1Avg, "Śr. okresu 1 (punkty)");
     replacePointAvgCell(period2AvgCell, period2Avg, "Śr. okresu 2 (punkty)");
     replacePointAvgCell(yearAvgCell, yearAvg, "Śr. roczna (punkty)");
+    replacePredictedGradeCell(period1PredCell, period1Predicted, "Przewidywana ocena śródroczna");
+    replacePredictedGradeCell(yearPredCell, yearPredicted, "Przewidywana ocena roczna");
   }
 
   /**
    * Injects the computed averages into the "Śr.I" and "Śr.II" cells
    * of a subject row in the main decorated table.
    */
-  function injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal) {
+  function injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal, predicted1, predictedYear) {
     const cells = Array.from(subjectRow.querySelectorAll("td"));
     const nodeImg = subjectRow.querySelector("img[id$='_node']");
     const replacedCells = new Set();
@@ -407,8 +704,10 @@
       const nodeCellIndex = cells.findIndex((cell) => cell.contains(nodeImg));
       if (nodeCellIndex >= 0) {
         replaceByIndex(nodeCellIndex + 3, avg1, "Śr. okresu 1");
+        replacePredictedGradeCell(cells[nodeCellIndex + 5], predicted1, "Przewidywana ocena śródroczna");
         replaceByIndex(nodeCellIndex + 7, avg2, "Śr. okresu 2");
         replaceByIndex(nodeCellIndex + 9, avgTotal, "Śr. roczna");
+        replacePredictedGradeCell(cells[nodeCellIndex + 11], predictedYear, "Przewidywana ocena roczna");
       }
     }
 
@@ -427,8 +726,12 @@
 
       if (tdTitle.includes("pierwszego okresu") || title.includes("pierwszego okresu")) {
         replaceDisabledAvgCell(td, avg1, "Śr. okresu 1");
+      } else if (tdTitle.includes("przewidywana ocena śródroczna") || title.includes("przewidywana ocena śródroczna")) {
+        replacePredictedGradeCell(td, predicted1, "Przewidywana ocena śródroczna");
       } else if (tdTitle.includes("drugiego okresu") || title.includes("drugiego okresu")) {
         replaceDisabledAvgCell(td, avg2, "Śr. okresu 2");
+      } else if (tdTitle.includes("przewidywana ocena roczna") || title.includes("przewidywana ocena roczna")) {
+        replacePredictedGradeCell(td, predictedYear, "Przewidywana ocena roczna");
       } else if (tdTitle.includes("roczna") || title.includes("roczna")) {
         replaceDisabledAvgCell(td, avgTotal, "Śr. roczna");
       }
@@ -453,12 +756,10 @@
     // Annual average = weighted average across all grades from both periods
     const allGrades = [...period1, ...period2];
     const avgTotal = calcWeightedAverage(allGrades);
+    const predicted1 = predictGradeFromValue(avg1, styleConfig.predictedGradeThresholds);
+    const predictedYear = predictGradeFromValue(avgTotal, styleConfig.predictedGradeThresholds);
 
-    // Check if this row actually has any disabled average cells before touching it
-    const hasDisabledAvg = subjectRow.querySelector("img.helper-icon") !== null;
-    if (!hasDisabledAvg) return;
-
-    injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal);
+    injectAveragesIntoRow(subjectRow, avg1, avg2, avgTotal, predicted1, predictedYear);
   }
 
   // ─── Main orchestration ────────────────────────────────────────────────────
@@ -483,13 +784,105 @@
         processSubjectRow(row);
       }
     }
+
+    refreshExistingBadges();
   }
 
-  // Wait for page to be fully ready (Librus uses JS to render some elements)
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", main);
-  } else {
+  function registerStorageListener() {
+    if (!chrome?.storage?.onChanged) return;
+
+    try {
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "sync") return;
+        if (!changes[STYLE_CONFIG_STORAGE_KEY]) return;
+
+        applyStyleConfig(changes[STYLE_CONFIG_STORAGE_KEY].newValue);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  function registerRuntimeMessageListener() {
+    if (!chrome?.runtime?.onMessage) return;
+
+    try {
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message?.type !== "lav-style-config-updated") return;
+
+        applyStyleConfig(message.config);
+        refreshExistingBadges();
+        main();
+      });
+    } catch (error) {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  function registerFocusRefreshListener() {
+    let isRefreshing = false;
+
+    async function refreshFromStorage() {
+      if (isRefreshing) return;
+      isRefreshing = true;
+
+      try {
+        const loadedConfig = await loadStyleConfig();
+        if (!applyStyleConfig(loadedConfig)) return;
+        refreshExistingBadges();
+        main();
+      } catch (error) {
+        if (!isExtensionContextInvalidatedError(error)) {
+          throw error;
+        }
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    // Fallback refresh when returning from extension popup to the page.
+    window.addEventListener("focus", () => {
+      void refreshFromStorage();
+    });
+
+    // Some browsers restore page activity via visibility instead of focus.
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      void refreshFromStorage();
+    });
+  }
+
+  function runMainWhenReady() {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        setTimeout(main, 800);
+      }, { once: true });
+      return;
+    }
+
     // Small delay to let Librus JS finish rendering
     setTimeout(main, 800);
   }
+
+  loadStyleConfig()
+    .then((loadedConfig) => {
+      applyStyleConfig(loadedConfig);
+    })
+    .catch((error) => {
+      if (!isExtensionContextInvalidatedError(error)) {
+        throw error;
+      }
+    })
+    .finally(() => {
+      registerStorageListener();
+      registerRuntimeMessageListener();
+      registerFocusRefreshListener();
+      runMainWhenReady();
+    });
 })();

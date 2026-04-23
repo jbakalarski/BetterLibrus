@@ -1,9 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Better Librus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Rozszerzenie ulepszające Librus Synergia: średnie ocen i kolejne funkcje usprawniające korzystanie z e-dziennika.",
-  "permissions": [],
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_title": "Better Librus - ustawienia",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": [
