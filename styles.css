@@ -20,7 +20,7 @@
 /* ── Colour scale ── */
 
 .lav-excellent { background: #27ae60; }
-.lav-good      { background: #2ecc71; color: #1a5c30; }
+.lav-good      { background: #2ecc71; }
 .lav-ok        { background: #f39c12; }
 .lav-poor      { background: #e67e22; }
 .lav-bad       { background: #e74c3c; }

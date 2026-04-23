@@ -24,15 +24,17 @@
   // Default style config preserves current behavior.
   const DEFAULT_STYLE_CONFIG = Object.freeze({
     gradeThresholds: [
+      { min: 5.75, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
       { min: 4.75, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
-      { min: 3.75, style: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" } },
+      { min: 3.75, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
       { min: 2.75, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
       { min: 1.75, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
       { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
     ],
     pointThresholds: [
+      { min: 100.00, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
       { min: 90.00, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
-      { min: 70.00, style: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" } },
+      { min: 70.00, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
       { min: 50.00, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
       { min: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
       { min: 0, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
@@ -57,7 +59,7 @@
       1: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" },
       2: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" },
       3: { background: "#f39c12", text: "#ffffff", border: "#d8870d" },
-      4: { background: "#2ecc71", text: "#1a5c30", border: "#27ae60" },
+      4: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" },
       5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
       6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
     },
