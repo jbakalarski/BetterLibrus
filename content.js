@@ -63,6 +63,14 @@
       5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
       6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
     },
+    predictedGrades: [
+      { grade: 6, averageMin: 5.75, pointMin: 100.00, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
+      { grade: 5, averageMin: 4.75, pointMin: 90.00, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+      { grade: 4, averageMin: 3.75, pointMin: 70.00, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
+      { grade: 3, averageMin: 2.75, pointMin: 50.00, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+      { grade: 2, averageMin: 1.75, pointMin: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+      { grade: 1, averageMin: 0.00, pointMin: 0.00, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+    ],
     gradeModifiers: {
       plus: 0.5,
       minus: -0.25,
@@ -127,9 +135,16 @@
     const defaults = DEFAULT_STYLE_CONFIG;
     const gradeThresholds = normalizeThresholdList(rawConfig?.gradeThresholds, defaults.gradeThresholds);
     const pointThresholds = normalizeThresholdList(rawConfig?.pointThresholds, defaults.pointThresholds);
-    const predictedGradeThresholds = normalizePredictedThresholdList(rawConfig?.predictedGradeThresholds, defaults.predictedGradeThresholds);
-    const predictedPointThresholds = normalizePredictedThresholdList(rawConfig?.predictedPointThresholds, defaults.predictedPointThresholds);
-    const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, defaults.predictedGradeStyles);
+    const legacyPredictedGradeThresholds = normalizePredictedThresholdList(rawConfig?.predictedGradeThresholds, defaults.predictedGradeThresholds);
+    const legacyPredictedPointThresholds = normalizePredictedThresholdList(rawConfig?.predictedPointThresholds, defaults.predictedPointThresholds);
+    const legacyPredictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, defaults.predictedGradeStyles);
+    const predictedGrades = normalizePredictedGradeEntries(rawConfig?.predictedGrades, legacyPredictedGradeThresholds, legacyPredictedPointThresholds, legacyPredictedGradeStyles);
+    const predictedGradeThresholds = predictedGrades.map((entry) => ({ grade: entry.grade, min: entry.averageMin }));
+    const predictedPointThresholds = predictedGrades.map((entry) => ({ grade: entry.grade, min: entry.pointMin }));
+    const predictedGradeStyles = predictedGrades.reduce((acc, entry) => {
+      acc[String(entry.grade)] = { ...entry.style };
+      return acc;
+    }, {});
     const gradeModifiers = normalizeGradeModifiers(rawConfig?.gradeModifiers, defaults.gradeModifiers);
 
     return {
@@ -138,8 +153,44 @@
       predictedGradeThresholds,
       predictedPointThresholds,
       predictedGradeStyles,
+      predictedGrades,
       gradeModifiers,
     };
+  }
+
+  function normalizePredictedGradeEntries(rawEntries, legacyGradeThresholds, legacyPointThresholds, legacyStyles) {
+    const source = Array.isArray(rawEntries) ? rawEntries : [];
+    const sourceByGrade = new Map();
+
+    for (const entry of source) {
+      const grade = normalizeGradeValue(entry?.grade, null);
+      if (grade === null) continue;
+      sourceByGrade.set(grade, entry);
+    }
+
+    const legacyGradeByGrade = new Map(legacyGradeThresholds.map((entry) => [entry.grade, entry.min]));
+    const legacyPointByGrade = new Map(legacyPointThresholds.map((entry) => [entry.grade, entry.min]));
+    const defaultsByGrade = new Map(DEFAULT_STYLE_CONFIG.predictedGrades.map((entry) => [entry.grade, entry]));
+
+    return PREDICTED_GRADES
+      .map((grade) => {
+        const current = sourceByGrade.get(grade);
+        const fallback = defaultsByGrade.get(grade);
+        const key = String(grade);
+        const styleFallback = legacyStyles[key] || fallback.style;
+
+        return {
+          grade,
+          averageMin: normalizeThresholdValue(current?.averageMin, normalizeThresholdValue(current?.avgMin, legacyGradeByGrade.get(grade) ?? fallback.averageMin)),
+          pointMin: normalizeThresholdValue(current?.pointMin, legacyPointByGrade.get(grade) ?? fallback.pointMin),
+          style: {
+            background: normalizeHexColor(current?.style?.background, styleFallback.background),
+            text: normalizeHexColor(current?.style?.text, styleFallback.text),
+            border: normalizeHexColor(current?.style?.border, styleFallback.border),
+          },
+        };
+      })
+      .sort((a, b) => b.grade - a.grade);
   }
 
   function normalizeGradeModifiers(rawModifiers, defaults) {

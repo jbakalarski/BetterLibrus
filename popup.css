@@ -133,24 +133,23 @@ body {
   grid-column: span 2;
 }
 
-.pred-threshold-row .threshold-grade-value,
-.pred-style-row .threshold-grade-value {
+.pred-grade-settings-row .threshold-grade-value {
   grid-column: span 1;
 }
 
-.pred-threshold-row {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.pred-grade-settings-row {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
-.pred-threshold-row .threshold-value {
+.pred-grade-settings-row .threshold-value {
   grid-column: span 1;
 }
 
-.pred-style-row {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.pred-grade-settings-row .threshold-color {
+  grid-column: span 1;
 }
 
-.pred-style-row .preview-wrap {
+.pred-grade-settings-row .preview-wrap {
   grid-column: span 1;
 }
 
@@ -322,10 +321,10 @@ input[type="color"] {
     grid-column: span 2;
   }
 
-  .pred-threshold-row .threshold-grade-value,
-  .pred-threshold-row .threshold-value,
-  .pred-style-row .threshold-grade-value,
-  .pred-style-row .preview-wrap {
+  .pred-grade-settings-row .threshold-grade-value,
+  .pred-grade-settings-row .threshold-value,
+  .pred-grade-settings-row .threshold-color,
+  .pred-grade-settings-row .preview-wrap {
     grid-column: span 2;
   }
 

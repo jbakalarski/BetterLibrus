@@ -45,6 +45,14 @@ const DEFAULT_CONFIG = {
     5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
     6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
   },
+  predictedGrades: [
+    { grade: 6, averageMin: 5.75, pointMin: 100.00, style: { background: "#16a085", text: "#ffffff", border: "#12806a" } },
+    { grade: 5, averageMin: 4.75, pointMin: 90.00, style: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" } },
+    { grade: 4, averageMin: 3.75, pointMin: 70.00, style: { background: "#2ecc71", text: "#ffffff", border: "#27ae60" } },
+    { grade: 3, averageMin: 2.75, pointMin: 50.00, style: { background: "#f39c12", text: "#ffffff", border: "#d8870d" } },
+    { grade: 2, averageMin: 1.75, pointMin: 40.00, style: { background: "#e67e22", text: "#ffffff", border: "#c96d1d" } },
+    { grade: 1, averageMin: 0.00, pointMin: 0.00, style: { background: "#e74c3c", text: "#ffffff", border: "#c53f32" } },
+  ],
   gradeModifiers: {
     plus: 0.5,
     minus: -0.25,
@@ -56,13 +64,10 @@ const ui = {
   modifierMinusInput: document.getElementById("modifier-minus"),
   gradeContainer: document.getElementById("grade-thresholds"),
   pointContainer: document.getElementById("point-thresholds"),
-  predGradeContainer: document.getElementById("pred-grade-thresholds"),
-  predPointContainer: document.getElementById("pred-point-thresholds"),
-  predStyleContainer: document.getElementById("pred-grade-styles"),
+  predGradeSettingsContainer: document.getElementById("pred-grade-settings"),
   status: document.getElementById("status"),
   template: document.getElementById("threshold-template"),
-  predThresholdTemplate: document.getElementById("pred-threshold-template"),
-  predStyleTemplate: document.getElementById("pred-style-template"),
+  predGradeSettingsTemplate: document.getElementById("pred-grade-settings-template"),
   addGradeBtn: document.getElementById("add-grade-threshold"),
   addPointBtn: document.getElementById("add-point-threshold"),
   saveBtn: document.getElementById("save-config"),
@@ -125,6 +130,7 @@ function normalizeConfig(rawConfig) {
   const predictedGradeThresholds = normalizePredictionThresholds(rawConfig?.predictedGradeThresholds, DEFAULT_CONFIG.predictedGradeThresholds);
   const predictedPointThresholds = normalizePredictionThresholds(rawConfig?.predictedPointThresholds, DEFAULT_CONFIG.predictedPointThresholds);
   const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, DEFAULT_CONFIG.predictedGradeStyles);
+  const predictedGrades = normalizePredictedGradeEntries(rawConfig?.predictedGrades, predictedGradeThresholds, predictedPointThresholds, predictedGradeStyles);
   const gradeModifiers = normalizeGradeModifiers(rawConfig?.gradeModifiers, DEFAULT_CONFIG.gradeModifiers);
 
   return {
@@ -133,8 +139,43 @@ function normalizeConfig(rawConfig) {
     predictedGradeThresholds,
     predictedPointThresholds,
     predictedGradeStyles,
+    predictedGrades,
     gradeModifiers,
   };
+}
+
+function normalizePredictedGradeEntries(rawEntries, gradeThresholds, pointThresholds, styles) {
+  const source = Array.isArray(rawEntries) ? rawEntries : [];
+  const sourceByGrade = new Map();
+  for (const entry of source) {
+    const grade = normalizeGradeValue(entry?.grade, null);
+    if (grade === null) continue;
+    sourceByGrade.set(grade, entry);
+  }
+
+  const avgByGrade = new Map(gradeThresholds.map((entry) => [entry.grade, entry.min]));
+  const pointByGrade = new Map(pointThresholds.map((entry) => [entry.grade, entry.min]));
+  const defaultsByGrade = new Map(DEFAULT_CONFIG.predictedGrades.map((entry) => [entry.grade, entry]));
+
+  return PREDICTED_GRADES
+    .map((grade) => {
+      const fallback = defaultsByGrade.get(grade);
+      const current = sourceByGrade.get(grade);
+      const key = String(grade);
+      const styleFallback = styles[key] || fallback.style;
+
+      return {
+        grade,
+        averageMin: normalizeThresholdValue(current?.averageMin, normalizeThresholdValue(current?.avgMin, avgByGrade.get(grade) ?? fallback.averageMin)),
+        pointMin: normalizeThresholdValue(current?.pointMin, pointByGrade.get(grade) ?? fallback.pointMin),
+        style: {
+          background: normalizeHexColor(current?.style?.background, styleFallback.background),
+          text: normalizeHexColor(current?.style?.text, styleFallback.text),
+          border: normalizeHexColor(current?.style?.border, styleFallback.border),
+        },
+      };
+    })
+    .sort((a, b) => b.grade - a.grade);
 }
 
 function normalizeGradeModifiers(rawModifiers, fallbackModifiers) {
@@ -235,48 +276,38 @@ function buildThresholdRow(entry, mode) {
   return row;
 }
 
-function buildPredictionThresholdRow(entry, mode) {
-  const row = ui.predThresholdTemplate.content.firstElementChild.cloneNode(true);
+function buildPredictionRow(entry) {
+  const row = ui.predGradeSettingsTemplate.content.firstElementChild.cloneNode(true);
 
   const gradeInput = row.querySelector(".input-grade");
-  const minInput = row.querySelector(".input-min");
-  const suffix = row.querySelector(".suffix");
-
-  row.dataset.grade = String(entry.grade);
-  gradeInput.value = String(entry.grade);
-  minInput.value = String(entry.min);
-  minInput.min = "0";
-  minInput.step = "0.01";
-  suffix.textContent = mode === "point" ? "%" : "";
-
-  minInput.addEventListener("input", clearStatus);
-
-  return row;
-}
-
-function buildPredictionStyleRow(grade, style) {
-  const row = ui.predStyleTemplate.content.firstElementChild.cloneNode(true);
-
-  const gradeInput = row.querySelector(".input-grade");
+  const avgMinInput = row.querySelector(".input-min-grade");
+  const pointMinInput = row.querySelector(".input-min-point");
   const bgInput = row.querySelector(".input-bg");
   const textInput = row.querySelector(".input-text");
   const borderInput = row.querySelector(".input-border");
   const preview = row.querySelector(".preview-badge");
 
-  row.dataset.grade = String(grade);
-  gradeInput.value = String(grade);
-
-  bgInput.value = style.background;
-  textInput.value = style.text;
-  borderInput.value = style.border;
+  row.dataset.grade = String(entry.grade);
+  gradeInput.value = String(entry.grade);
+  avgMinInput.value = String(entry.averageMin);
+  avgMinInput.min = "0";
+  avgMinInput.step = "0.01";
+  pointMinInput.value = String(entry.pointMin);
+  pointMinInput.min = "0";
+  pointMinInput.step = "0.01";
+  bgInput.value = entry.style.background;
+  textInput.value = entry.style.text;
+  borderInput.value = entry.style.border;
 
   function updatePreview() {
     preview.style.backgroundColor = bgInput.value;
     preview.style.color = textInput.value;
     preview.style.borderColor = borderInput.value;
-    preview.textContent = String(grade);
+    preview.textContent = String(entry.grade);
   }
 
+  avgMinInput.addEventListener("input", clearStatus);
+  pointMinInput.addEventListener("input", clearStatus);
   bgInput.addEventListener("input", updatePreview);
   textInput.addEventListener("input", updatePreview);
   borderInput.addEventListener("input", updatePreview);
@@ -295,15 +326,7 @@ function renderThresholdSection(container, list, mode) {
 function renderPredictionThresholdSection(container, list, mode) {
   container.innerHTML = "";
   for (const entry of list) {
-    container.appendChild(buildPredictionThresholdRow(entry, mode));
-  }
-}
-
-function renderPredictedStylesSection(container, styles) {
-  container.innerHTML = "";
-  for (const grade of PREDICTED_GRADES) {
-    const style = styles[String(grade)] || DEFAULT_CONFIG.predictedGradeStyles[String(grade)];
-    container.appendChild(buildPredictionStyleRow(grade, style));
+    container.appendChild(buildPredictionRow(entry));
   }
 }
 
@@ -328,36 +351,23 @@ function readThresholdSection(container) {
 }
 
 function readPredictionSection(container) {
-  const rows = Array.from(container.querySelectorAll(".pred-threshold-row"));
-
+  const rows = Array.from(container.querySelectorAll(".pred-grade-settings-row"));
   return rows
     .map((row) => {
       const grade = parseInt(row.dataset.grade || "", 10);
       return {
         grade,
-        min: parseFloat(row.querySelector(".input-min").value),
+        averageMin: parseFloat(row.querySelector(".input-min-grade").value),
+        pointMin: parseFloat(row.querySelector(".input-min-point").value),
+        style: {
+          background: row.querySelector(".input-bg").value,
+          text: row.querySelector(".input-text").value,
+          border: row.querySelector(".input-border").value,
+        },
       };
     })
-    .filter((entry) => Number.isInteger(entry.grade) && entry.grade >= 1 && entry.grade <= 6 && Number.isFinite(entry.min))
+    .filter((entry) => Number.isInteger(entry.grade) && entry.grade >= 1 && entry.grade <= 6 && Number.isFinite(entry.averageMin) && Number.isFinite(entry.pointMin))
     .sort((a, b) => b.grade - a.grade);
-}
-
-function readPredictedStylesSection(container) {
-  const rows = Array.from(container.querySelectorAll(".pred-style-row"));
-  const styles = {};
-
-  for (const row of rows) {
-    const grade = parseInt(row.dataset.grade || "", 10);
-    if (!Number.isInteger(grade) || grade < 1 || grade > 6) continue;
-
-    styles[String(grade)] = {
-      background: row.querySelector(".input-bg").value,
-      text: row.querySelector(".input-text").value,
-      border: row.querySelector(".input-border").value,
-    };
-  }
-
-  return styles;
 }
 
 function readGradeModifiers() {
@@ -371,9 +381,7 @@ function populateForm(config) {
   renderGradeModifiers(config.gradeModifiers);
   renderThresholdSection(ui.gradeContainer, config.gradeThresholds, "grade");
   renderThresholdSection(ui.pointContainer, config.pointThresholds, "point");
-  renderPredictionThresholdSection(ui.predGradeContainer, config.predictedGradeThresholds, "grade");
-  renderPredictionThresholdSection(ui.predPointContainer, config.predictedPointThresholds, "point");
-  renderPredictedStylesSection(ui.predStyleContainer, config.predictedGradeStyles);
+  renderPredictionThresholdSection(ui.predGradeSettingsContainer, config.predictedGrades, "grade");
 }
 
 async function loadConfigFromStorage() {
@@ -466,12 +474,32 @@ function hasMonotonicPredictedThresholds(list) {
   return true;
 }
 
+function toPredictedThresholds(list, fieldName) {
+  return list.map((entry) => ({
+    grade: entry.grade,
+    min: entry[fieldName],
+  }));
+}
+
+function toPredictedStyles(list) {
+  const styles = {};
+  for (const entry of list) {
+    styles[String(entry.grade)] = {
+      background: entry.style.background,
+      text: entry.style.text,
+      border: entry.style.border,
+    };
+  }
+  return styles;
+}
+
 function collectAndValidateConfig() {
   const gradeThresholds = readThresholdSection(ui.gradeContainer);
   const pointThresholds = readThresholdSection(ui.pointContainer);
-  const predictedGradeThresholds = readPredictionSection(ui.predGradeContainer);
-  const predictedPointThresholds = readPredictionSection(ui.predPointContainer);
-  const predictedGradeStyles = readPredictedStylesSection(ui.predStyleContainer);
+  const predictedGrades = readPredictionSection(ui.predGradeSettingsContainer);
+  const predictedGradeThresholds = toPredictedThresholds(predictedGrades, "averageMin");
+  const predictedPointThresholds = toPredictedThresholds(predictedGrades, "pointMin");
+  const predictedGradeStyles = toPredictedStyles(predictedGrades);
   const gradeModifiers = readGradeModifiers();
 
   if (!Number.isFinite(gradeModifiers.plus)) {
@@ -509,6 +537,7 @@ function collectAndValidateConfig() {
   return normalizeConfig({
     gradeThresholds,
     pointThresholds,
+    predictedGrades,
     predictedGradeThresholds,
     predictedPointThresholds,
     predictedGradeStyles,
