@@ -58,24 +58,10 @@
     <section id="tab-panel-pred" class="tab-panel" data-panel="pred" hidden>
       <section class="card">
         <div class="section-head">
-          <h2>Progi przewidywanej oceny (średnia)</h2>
+          <h2>Przewidywane oceny</h2>
         </div>
-        <div id="pred-grade-thresholds" class="threshold-list"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <h2>Progi przewidywanej oceny (punkty)</h2>
-        </div>
-        <div id="pred-point-thresholds" class="threshold-list"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <h2>Style przewidywanych ocen</h2>
-        </div>
-        <p class="subnote">Ustaw wygląd dla ocen: 1, 2, 3, 4, 5, 6.</p>
-        <div id="pred-grade-styles" class="threshold-list"></div>
+        <p class="subnote">Dla każdej oceny ustaw minimalną średnią, minimalny procent i styl.</p>
+        <div id="pred-grade-settings" class="threshold-list"></div>
       </section>
     </section>
 
@@ -120,41 +106,39 @@
     </div>
   </template>
 
-  <template id="pred-threshold-template">
-    <div class="threshold-row pred-threshold-row">
+  <template id="pred-grade-settings-template">
+    <div class="threshold-row pred-grade-settings-row">
       <label class="threshold-grade-value">
         Ocena
         <input type="number" class="input-grade" min="1" max="6" step="1" readonly />
       </label>
 
       <label class="threshold-value">
-        Próg od
+        Średnia od
         <div class="value-wrap">
-          <input type="number" class="input-min" step="0.01" />
-          <span class="suffix"></span>
+          <input type="number" class="input-min-grade" step="0.01" />
         </div>
       </label>
-    </div>
-  </template>
 
-  <template id="pred-style-template">
-    <div class="threshold-row pred-style-row">
-      <label class="threshold-grade-value">
-        Ocena
-        <input type="number" class="input-grade" min="1" max="6" step="1" readonly />
+      <label class="threshold-value">
+        Procent od
+        <div class="value-wrap">
+          <input type="number" class="input-min-point" step="0.01" />
+          <span class="suffix">%</span>
+        </div>
       </label>
 
-      <label>
+      <label class="threshold-color">
         Tło
         <input type="color" class="input-bg" />
       </label>
 
-      <label>
+      <label class="threshold-color">
         Tekst
         <input type="color" class="input-text" />
       </label>
 
-      <label>
+      <label class="threshold-color">
         Ramka
         <input type="color" class="input-border" />
       </label>
