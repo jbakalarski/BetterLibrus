@@ -6,7 +6,7 @@
  * Grades NOT counted are marked with nieaktywne.png (inactive).
  * Special grades like "np", "nb", "nk", "bz" are ignored in average calculation.
  *
- * Grade modifiers: "+" adds 0.5, "-" subtracts 0.25 to the base number.
+ * Grade modifiers are configurable from the extension popup.
  */
 
 (function () {
@@ -63,6 +63,10 @@
       5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
       6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
     },
+    gradeModifiers: {
+      plus: 0.5,
+      minus: -0.25,
+    },
   });
 
   let styleConfig = cloneStyleConfig(DEFAULT_STYLE_CONFIG);
@@ -79,6 +83,12 @@
   }
 
   function normalizeThresholdValue(value, fallback) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return parsed;
+  }
+
+  function normalizeModifierValue(value, fallback) {
     const parsed = parseFloat(value);
     if (!Number.isFinite(parsed)) return fallback;
     return parsed;
@@ -120,6 +130,7 @@
     const predictedGradeThresholds = normalizePredictedThresholdList(rawConfig?.predictedGradeThresholds, defaults.predictedGradeThresholds);
     const predictedPointThresholds = normalizePredictedThresholdList(rawConfig?.predictedPointThresholds, defaults.predictedPointThresholds);
     const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, defaults.predictedGradeStyles);
+    const gradeModifiers = normalizeGradeModifiers(rawConfig?.gradeModifiers, defaults.gradeModifiers);
 
     return {
       gradeThresholds,
@@ -127,6 +138,14 @@
       predictedGradeThresholds,
       predictedPointThresholds,
       predictedGradeStyles,
+      gradeModifiers,
+    };
+  }
+
+  function normalizeGradeModifiers(rawModifiers, defaults) {
+    return {
+      plus: normalizeModifierValue(rawModifiers?.plus, defaults.plus),
+      minus: normalizeModifierValue(rawModifiers?.minus, defaults.minus),
     };
   }
 
@@ -299,8 +318,8 @@
     const base = parseFloat(text.replace(/[+-]$/, ""));
     if (isNaN(base)) return null;
 
-    if (text.endsWith("+")) return base + 0.5;
-    if (text.endsWith("-")) return base - 0.25;
+    if (text.endsWith("+")) return base + styleConfig.gradeModifiers.plus;
+    if (text.endsWith("-")) return base + styleConfig.gradeModifiers.minus;
     return base;
   }
 
@@ -689,10 +708,11 @@
       if (!cell) return;
 
       const img = cell.querySelector("img.helper-icon");
-      if (!img) return;
+      const existingBadge = cell.querySelector("span.lav-badge[data-lav-kind='grade']");
+      if (!img && !existingBadge) return;
 
-      const title = img.getAttribute("title") || img.getAttribute("alt") || "";
-      if (!title.includes("wyłączony przez administratora")) return;
+      const title = img ? (img.getAttribute("title") || img.getAttribute("alt") || "") : "";
+      if (img && !title.includes("wyłączony przez administratora")) return;
 
       replaceDisabledAvgCell(cell, avg, label);
       replacedCells.add(cell);
@@ -716,10 +736,11 @@
       if (replacedCells.has(td)) continue;
 
       const img = td.querySelector("img.helper-icon");
-      if (!img) continue;
+      const existingBadge = td.querySelector("span.lav-badge[data-lav-kind='grade']");
+      if (!img && !existingBadge) continue;
 
-      const rawTitle = img.getAttribute("title") || img.getAttribute("alt") || "";
-      if (!rawTitle.includes("wyłączony przez administratora")) continue;
+      const rawTitle = img ? (img.getAttribute("title") || img.getAttribute("alt") || "") : "";
+      if (img && !rawTitle.includes("wyłączony przez administratora")) continue;
 
       const title = rawTitle.toLowerCase();
       const tdTitle = (td.getAttribute("title") || "").toLowerCase();
