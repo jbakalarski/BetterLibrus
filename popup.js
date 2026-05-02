@@ -45,15 +45,9 @@ const DEFAULT_CONFIG = {
     5: { background: "#27ae60", text: "#ffffff", border: "#1f8b4c" },
     6: { background: "#16a085", text: "#ffffff", border: "#12806a" },
   },
-  gradeModifiers: {
-    plus: 0.5,
-    minus: -0.25,
-  },
 };
 
 const ui = {
-  modifierPlusInput: document.getElementById("modifier-plus"),
-  modifierMinusInput: document.getElementById("modifier-minus"),
   gradeContainer: document.getElementById("grade-thresholds"),
   pointContainer: document.getElementById("point-thresholds"),
   predGradeContainer: document.getElementById("pred-grade-thresholds"),
@@ -82,12 +76,6 @@ function normalizeHexColor(color, fallback) {
 }
 
 function normalizeThresholdValue(value, fallback) {
-  const parsed = parseFloat(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
-}
-
-function normalizeModifierValue(value, fallback) {
   const parsed = parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;
   return parsed;
@@ -125,7 +113,6 @@ function normalizeConfig(rawConfig) {
   const predictedGradeThresholds = normalizePredictionThresholds(rawConfig?.predictedGradeThresholds, DEFAULT_CONFIG.predictedGradeThresholds);
   const predictedPointThresholds = normalizePredictionThresholds(rawConfig?.predictedPointThresholds, DEFAULT_CONFIG.predictedPointThresholds);
   const predictedGradeStyles = normalizePredictedGradeStyles(rawConfig?.predictedGradeStyles, DEFAULT_CONFIG.predictedGradeStyles);
-  const gradeModifiers = normalizeGradeModifiers(rawConfig?.gradeModifiers, DEFAULT_CONFIG.gradeModifiers);
 
   return {
     gradeThresholds,
@@ -133,14 +120,6 @@ function normalizeConfig(rawConfig) {
     predictedGradeThresholds,
     predictedPointThresholds,
     predictedGradeStyles,
-    gradeModifiers,
-  };
-}
-
-function normalizeGradeModifiers(rawModifiers, fallbackModifiers) {
-  return {
-    plus: normalizeModifierValue(rawModifiers?.plus, fallbackModifiers.plus),
-    minus: normalizeModifierValue(rawModifiers?.minus, fallbackModifiers.minus),
   };
 }
 
@@ -307,11 +286,6 @@ function renderPredictedStylesSection(container, styles) {
   }
 }
 
-function renderGradeModifiers(modifiers) {
-  ui.modifierPlusInput.value = String(modifiers.plus);
-  ui.modifierMinusInput.value = String(modifiers.minus);
-}
-
 function readThresholdSection(container) {
   const rows = Array.from(container.querySelectorAll(".threshold-row"));
   return rows
@@ -360,15 +334,7 @@ function readPredictedStylesSection(container) {
   return styles;
 }
 
-function readGradeModifiers() {
-  return {
-    plus: parseFloat(ui.modifierPlusInput.value),
-    minus: parseFloat(ui.modifierMinusInput.value),
-  };
-}
-
 function populateForm(config) {
-  renderGradeModifiers(config.gradeModifiers);
   renderThresholdSection(ui.gradeContainer, config.gradeThresholds, "grade");
   renderThresholdSection(ui.pointContainer, config.pointThresholds, "point");
   renderPredictionThresholdSection(ui.predGradeContainer, config.predictedGradeThresholds, "grade");
@@ -472,15 +438,6 @@ function collectAndValidateConfig() {
   const predictedGradeThresholds = readPredictionSection(ui.predGradeContainer);
   const predictedPointThresholds = readPredictionSection(ui.predPointContainer);
   const predictedGradeStyles = readPredictedStylesSection(ui.predStyleContainer);
-  const gradeModifiers = readGradeModifiers();
-
-  if (!Number.isFinite(gradeModifiers.plus)) {
-    throw new Error("Podaj poprawną wartość dla plusa.");
-  }
-
-  if (!Number.isFinite(gradeModifiers.minus)) {
-    throw new Error("Podaj poprawną wartość dla minusa.");
-  }
 
   if (gradeThresholds.length === 0) {
     throw new Error("Dodaj co najmniej jeden próg dla średnich ocen.");
@@ -512,7 +469,6 @@ function collectAndValidateConfig() {
     predictedGradeThresholds,
     predictedPointThresholds,
     predictedGradeStyles,
-    gradeModifiers,
   });
 }
 
@@ -526,8 +482,6 @@ function attachEvents() {
 
   ui.addGradeBtn.addEventListener("click", () => addThreshold(ui.gradeContainer, "grade"));
   ui.addPointBtn.addEventListener("click", () => addThreshold(ui.pointContainer, "point"));
-  ui.modifierPlusInput.addEventListener("input", clearStatus);
-  ui.modifierMinusInput.addEventListener("input", clearStatus);
 
   ui.resetBtn.addEventListener("click", () => {
     populateForm(cloneConfig(DEFAULT_CONFIG));
